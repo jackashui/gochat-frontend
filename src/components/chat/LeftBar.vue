@@ -31,7 +31,7 @@
         <el-button type="primary" :icon="Setting" class="setting-btn" @click="goToSettings">设置</el-button>
       </el-container>
     </el-container>
-  </template>
+</template>
 
 <script>
 import { ChatLineSquare, Delete, Setting } from '@element-plus/icons-vue';

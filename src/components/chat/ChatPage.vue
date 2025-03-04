@@ -2,7 +2,14 @@
   <el-container class="container">
     <!-- 侧边导航栏 -->
     <el-aside width="200px">
-      <LeftBar :dialogList="dialogList" :new_select_id="new_select_id" @dialog-selected="handleDialogSelected" @create-new-dialog="handleCreateNewDialog" style="width: 100%; height: 100%;"/>
+      <LeftBar 
+        :dialogList="dialogList" 
+        :new_select_id="new_select_id" 
+        @dialog-selected="handleDialogSelected" 
+        @create-new-dialog="handleCreateNewDialog" 
+        @delete-dialog="deleteDialog" 
+        style="width: 100%; height: 100%;"
+      />
     </el-aside>
     <!-- 聊天框主体 -->
     <el-container class="main-container">
@@ -29,10 +36,11 @@ export default {
 
   data() {
     return {
-      dialog_id:0,
-      dialog_name:"新对话",
-      dialogList:[],
-      new_select_id:0
+      dialog_id: 0,
+      dialog_name: "新对话",
+      dialogList: [],
+      new_select_id: 0,
+      loading: false, // 加载状态
     };
   },
 
@@ -43,9 +51,15 @@ export default {
 
   methods: {
     // 获取对话列表
-    async getDialogList(){
-      try{
-        const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+    async getDialogList() {
+      const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+      if (!token) {
+        ElMessage.warning('请先登录');
+        return;
+      }
+
+      this.loading = true; // 开始加载
+      try {
         const response = await axios.get('http://127.0.0.1:8080/chat/list', {
           headers: {
             'Authorization': `${token?.replace(/"/g, '')}`
@@ -56,28 +70,30 @@ export default {
         } else {
           console.error(response.data);
         }
-      }catch(error){
+      } catch (error) {
         console.error('获取对话列表失败:', error);
+      } finally {
+        this.loading = false; // 结束加载
       }
     },
 
     // 处理对话选择
-    handleDialogSelected(dialog){
+    handleDialogSelected(dialog) {
       this.dialog_id = dialog.id;
       this.dialog_name = dialog.name;
     },
 
     // 处理新建对话
-    handleCreateNewDialog(){
+    handleCreateNewDialog() {
       this.dialog_id = 0;
       this.dialog_name = "新对话";
     },
 
     // 处理新对话
-    handleNewDialog(dialog){
+    handleNewDialog(dialog) {
       this.dialog_id = dialog.id;
       this.dialog_name = dialog.name;
-      
+
       // 检查列表中是否已存在相同ID的对话
       const existingIndex = this.dialogList.findIndex(item => item.id === dialog.id);
       if (existingIndex !== -1) {
@@ -88,11 +104,53 @@ export default {
         this.dialogList.push(dialog);
       }
 
+      // 更新选中状态
       this.new_select_id = this.dialogList.findIndex(item => item.id === dialog.id);
+    },
+
+    // 删除对话
+    async deleteDialog(dialogId) {
+      try {
+        // 弹出确认框
+        await ElMessageBox.confirm('确定要删除该对话吗？', '提示', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning'
+        });
+
+        this.loading = true; // 开始加载
+        // 调用后端 API 删除对话
+        const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
+        const response = await axios.delete(`http://127.0.0.1:8080/chat/delete?id=${dialogId}`, {
+          headers: {
+            'Authorization': `${token?.replace(/"/g, '')}`
+          }
+        });
+
+        if (response.data.code === 200) {
+          // 删除成功，直接从本地列表中移除该对话
+          this.dialogList = this.dialogList.filter(dialog => dialog.id !== dialogId);
+          ElMessage.success('删除成功');
+
+          // 如果删除的是当前选中的对话，重置选中状态
+          if (this.dialog_id === dialogId) {
+            this.dialog_id = 0;
+            this.dialog_name = "新对话";
+          }
+        } else {
+          ElMessage.error('删除失败：' + response.data.message);
+        }
+      } catch (error) {
+        if (error !== 'cancel') {
+          ElMessage.error('删除失败：' + (error.response?.data?.message || error.message));
+        }
+      } finally {
+        this.loading = false;
+      }
     }
   },
 
-  mounted(){
+  mounted() {
     this.getDialogList();
   }
 };
